@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GW2 Music Player</title>
+    <meta name="description" content="Play the Guild Wars 2 musical instruments in your browser.">
+    <link rel="icon" href="image/Converter_icon.ico">
+    <link rel="stylesheet" href="css/gw2musicplayer.css">
+    <script src="javascript/instruments.js" defer></script>
+    <script src="javascript/gw2musicplayer.js" defer></script>
+</head>
+<body>
+    <main class="content">
+        <p id="notice" class="notice" hidden></p>
+
+        <div id="instrumentbar" class="instrumentbar"></div>
+
+        <div id="keys" class="keys">
+            <div class="sharps">
+                <div class="skill" data-slot="f1" style="--col: 1"><span class="hotkey"></span></div>
+                <div class="skill" data-slot="f2" style="--col: 2"><span class="hotkey"></span></div>
+                <div class="skill" data-slot="f3" style="--col: 4"><span class="hotkey"></span></div>
+                <div class="skill" data-slot="f4" style="--col: 5"><span class="hotkey"></span></div>
+                <div class="skill" data-slot="f5" style="--col: 6"><span class="hotkey"></span></div>
+            </div>
+            <div class="naturals">
+                <div class="skill" data-slot="s1"><span class="hotkey"></span></div>
+                <div class="skill" data-slot="s2"><span class="hotkey"></span></div>
+                <div class="skill" data-slot="s3"><span class="hotkey"></span></div>
+                <div class="skill" data-slot="s4"><span class="hotkey"></span></div>
+                <div class="skill" data-slot="s5"><span class="hotkey"></span></div>
+                <div class="skill" data-slot="s6"><span class="hotkey"></span></div>
+                <div class="skill" data-slot="s7"><span class="hotkey"></span></div>
+                <div class="skill" data-slot="s8"><span class="hotkey"></span></div>
+                <div class="skill" data-slot="s9"><span class="hotkey"></span></div>
+                <div class="skill" data-slot="s10"><span class="hotkey"></span></div>
+            </div>
+        </div>
+
+        <div class="settingsbar">
+            <button id="rebind-button" class="button">Rebind Hotkeys</button>
+
+            <label class="switch" title="Play the instruments with all the quirks and limitations they have in Guild Wars 2.">
+                <input type="checkbox" id="accurate-toggle">
+                <span class="switch-slider"></span>
+                <span class="switch-label">GW2 Accurate</span>
+            </label>
+
+            <div class="volume-container">
+                <img src="image/volume-mid.png" id="volume-icon" alt="Volume">
+                <div class="volume-slider" id="volume-slider">
+                    <input type="range" min="0" max="100" value="50" aria-label="Volume">
+                    <progress min="0" max="100" value="50"></progress>
+                </div>
+                <div class="volume-value" id="volume-value">50</div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        Fan-made and not affiliated with ArenaNet or NCSOFT. Guild Wars 2 sounds and images &copy; ArenaNet, LLC.
+    </footer>
+
+    <div id="hotkey-menu" class="hotkey-menu" hidden>
+        <div class="hotkey-menu-content" role="dialog" aria-labelledby="hotkey-title">
+            <h2 id="hotkey-title">Rebind Hotkeys</h2>
+            <p id="hotkey-hint" class="hotkey-hint" aria-live="polite"></p>
+            <div class="hotkey-board">
+                <div id="hotkey-sharps" class="hotkey-sharps"></div>
+                <div id="hotkey-naturals" class="hotkey-naturals"></div>
+            </div>
+            <div class="hotkey-actions">
+                <button id="reset-hotkeys" class="button reset-button">Restore Defaults</button>
+                <button id="close-hotkey-menu" class="button done-button">Done</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
