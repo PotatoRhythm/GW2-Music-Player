@@ -14,7 +14,7 @@ const DEFAULT_BINDINGS = {
 const NOTE_OFFSETS = { s1: 0, f1: 1, s2: 2, f2: 3, s3: 4, s4: 5, f3: 6, s5: 7, f4: 8, s6: 9, f5: 10, s7: 11, s8: 12 };
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
-const FADE = { in: 0.003, out: 0.05, release: 0.7, cut: 0.3, stop: 0.5, swap: 0.7, choke: 0.06, noteEnd: 0.5 };
+const FADE = { in: 0.003, out: 0.05, release: 0.7, cut: 0.3, stop: 0.5, swap: 0.7, choke: 0.06, noteEnd: 0.5, cancel: 0.8 };
 const SCHEDULE_AHEAD = 0.03;
 const TEMPO = { step: 0.25, recharge: 1.5, lead: 0.05 };
 const SWAP_SETTLE = 0.05;
@@ -655,6 +655,14 @@ function useSkill(slot) {
     }
 }
 
+function cancelNotes() {
+    if (state.accurate && current().layout === 'organ') return;
+    afterPing(() => {
+        cancelQueuedNote();
+        stopAll(FADE.cancel);
+    });
+}
+
 function endSkill(slot) {
     const count = pressedBy.get(slot);
     if (!count) return;
@@ -811,6 +819,10 @@ const heldKeys = new Map();
 document.addEventListener('keydown', event => {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.target.matches('input[type="number"]')) return;
+    if (event.code === 'Escape') {
+        if (!event.repeat) cancelNotes();
+        return;
+    }
     const slot = slotForKey(event.code);
     if (!slot) return;
     event.preventDefault();
