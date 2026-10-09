@@ -17,12 +17,19 @@ const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 
 const FADE = { in: 0.003, out: 0.05, release: 0.7, cut: 0.3, stop: 0.5, swap: 0.7, choke: 0.06, noteEnd: 0.5 };
 const SCHEDULE_AHEAD = 0.03;
 const TEMPO = { step: 0.25, recharge: 1.5, lead: 0.05 };
+const SWAP_SETTLE = 0.05;
 const MAX_HELD_NOTE = 60;
 const MAX_VOICES = 48;
 const MAX_DECODED_INSTRUMENTS = 4;
 const MAX_DOWNLOADS = 6;
 const DOWNLOAD_ATTEMPTS = 3;
 const STORAGE_KEY = 'gw2musicplayer.settings';
+const REGIONS = {
+    NA: { name: 'North American', aws: 'us-east-1' },
+    EU: { name: 'European', aws: 'eu-central-1' },
+    Custom: {},
+};
+const PING = { refresh: 1000, offset: 10, max: 9999 };
 
 const state = {
     instrument: 'piano',
@@ -31,6 +38,8 @@ const state = {
     volume: 50,
     bindings: { ...DEFAULT_BINDINGS },
     tempoLocked: false,
+    region: Intl.DateTimeFormat().resolvedOptions().timeZone?.startsWith('Europe/') ? 'EU' : 'NA',
+    customPing: 100,
 };
 
 /* ### SETTINGS ### */
@@ -41,6 +50,8 @@ function loadSettings() {
         if (!saved) return;
         if (typeof saved.accurate === 'boolean') state.accurate = saved.accurate;
         if (Number.isFinite(saved.volume)) state.volume = Math.min(100, Math.max(0, saved.volume));
+        if (saved.region in REGIONS) state.region = saved.region;
+        if (Number.isFinite(saved.customPing)) state.customPing = Math.min(PING.max, Math.max(0, saved.customPing));
         for (const slot of SLOTS) {
             if (saved.bindings && slot in saved.bindings) state.bindings[slot] = saved.bindings[slot];
         }
@@ -48,9 +59,9 @@ function loadSettings() {
 }
 
 function saveSettings() {
-    const { accurate, volume, bindings } = state;
+    const { accurate, volume, bindings, region, customPing } = state;
     try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ accurate, volume, bindings }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ accurate, volume, bindings, region, customPing }));
     } catch {}
 }
 
@@ -597,8 +608,33 @@ function endCooldown(slot) {
     skillEls[slot].querySelector('.cooldown-time')?.remove();
 }
 
+const droppedBy = new Map();
+let swapInFlight = false;
+
 function pressSlot(slot) {
     unlockAudio();
+    const swap = state.accurate && ['octaveUp', 'octaveDown'].includes(slotAction(slot)?.type);
+    if (swap && swapInFlight) {
+        droppedBy.set(slot, (droppedBy.get(slot) || 0) + 1);
+        return;
+    }
+    if (swap) swapInFlight = true;
+    afterPing(() => {
+        useSkill(slot);
+        if (swap) setTimeout(() => swapInFlight = false, SWAP_SETTLE * 1000);
+    });
+}
+
+function releaseSlot(slot) {
+    const dropped = droppedBy.get(slot);
+    if (dropped) {
+        if (dropped > 1) droppedBy.set(slot, dropped - 1); else droppedBy.delete(slot);
+        return;
+    }
+    afterPing(() => endSkill(slot));
+}
+
+function useSkill(slot) {
     const action = slotAction(slot);
     if (!action || action.locked || cooldowns.has(slot)) return;
 
@@ -619,7 +655,7 @@ function pressSlot(slot) {
     }
 }
 
-function releaseSlot(slot) {
+function endSkill(slot) {
     const count = pressedBy.get(slot);
     if (!count) return;
     if (count > 1) {
@@ -774,6 +810,7 @@ const heldKeys = new Map();
 
 document.addEventListener('keydown', event => {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.target.matches('input[type="number"]')) return;
     const slot = slotForKey(event.code);
     if (!slot) return;
     event.preventDefault();
@@ -840,6 +877,106 @@ function menuIcon(slot) {
     return `skill${slot.startsWith('f') ? 'F' + slot.slice(1) : slot.slice(1)}.png`;
 }
 
+/* ### PING ### */
+
+const ping = { ms: null, warm: false, failed: false, run: 0, timer: null };
+const inputQueue = [];
+
+function inputDelay() {
+    if (!state.accurate) return 0;
+    return REGIONS[state.region].aws ? ping.ms || 0 : state.customPing;
+}
+
+function afterPing(fn) {
+    const now = performance.now();
+    const due = Math.max(now + inputDelay(), inputQueue.at(-1)?.due ?? 0);
+    if (due <= now) return fn();
+    inputQueue.push({ fn, due });
+    if (inputQueue.length === 1) setTimeout(drainInputs, due - now);
+}
+
+function drainInputs() {
+    while (inputQueue.length && inputQueue[0].due <= performance.now()) inputQueue.shift().fn();
+    if (inputQueue.length) setTimeout(drainInputs, inputQueue[0].due - performance.now());
+}
+
+async function timeRequest(url) {
+    const start = performance.now();
+    await fetch(url, { mode: 'no-cors', cache: 'no-store' });
+    return performance.now() - start;
+}
+
+async function measurePing() {
+    const run = ping.run;
+    const url = `https://dynamodb.${REGIONS[state.region].aws}.amazonaws.com/ping`;
+    try {
+        const ms = await timeRequest(url);
+        if (run !== ping.run) return;
+        if (ping.warm) ping.ms = Math.round(ms) + PING.offset;
+        ping.warm = true;
+        ping.failed = false;
+    } catch {
+        if (run !== ping.run) return;
+        ping.warm = false;
+        ping.failed = true;
+    }
+    showPing();
+}
+
+function updatePing() {
+    clearTimeout(ping.timer);
+    const run = ++ping.run;
+    ping.warm = false;
+    showPing();
+    if (!state.accurate || document.hidden || !REGIONS[state.region].aws) return;
+    const loop = async () => {
+        await measurePing();
+        if (run === ping.run) ping.timer = setTimeout(loop, PING.refresh);
+    };
+    loop();
+}
+
+function showPing() {
+    const el = document.getElementById('ping');
+    const value = document.getElementById('ping-value');
+    const region = REGIONS[state.region];
+    el.hidden = !state.accurate;
+    document.getElementById('ping-region').textContent = region.aws ? `${state.region} Ping:` : 'Ping:';
+    document.getElementById('ping-custom').hidden = Boolean(region.aws);
+    value.hidden = !region.aws;
+    value.textContent = `${ping.ms === null ? '…' : ping.ms} ms`;
+    value.classList.toggle('failed', Boolean(ping.failed));
+    el.title = !region.aws ? 'Your chosen ping. '
+        : ping.failed ? `Couldn't reach the ${region.name} servers. `
+        : `Your estimated ping to the ${region.name} servers. `;
+    el.title += 'Skills react this much later, like in game. Click to switch between NA, EU and Custom.';
+}
+
+function setupPing() {
+    document.getElementById('ping').addEventListener('click', event => {
+        if (event.target.closest('#ping-custom')) return;
+        const ids = Object.keys(REGIONS);
+        state.region = ids[(ids.indexOf(state.region) + 1) % ids.length];
+        ping.ms = null;
+        saveSettings();
+        updatePing();
+    });
+
+    const input = document.querySelector('#ping-custom input');
+    input.max = PING.max;
+    input.value = state.customPing;
+    input.addEventListener('input', () => {
+        if (input.value === '') return;
+        state.customPing = Math.min(PING.max, Math.max(0, Math.round(Number(input.value))));
+        saveSettings();
+    });
+    input.addEventListener('change', () => input.value = state.customPing);
+    input.addEventListener('keydown', event => event.key === 'Enter' && input.blur());
+
+    document.addEventListener('visibilitychange', updatePing);
+    updatePing();
+}
+
 /* ### SETTINGS BAR ### */
 
 function setupSettingsBar() {
@@ -852,6 +989,7 @@ function setupSettingsBar() {
         stopAll(FADE.cut);
         flipSkills();
         saveSettings();
+        updatePing();
     });
 
     const slider = document.querySelector('#volume-slider input');
@@ -910,6 +1048,7 @@ async function init() {
     buildInstrumentBar();
     buildHotkeyMenu();
     setupSettingsBar();
+    setupPing();
     setupPointerInput();
     renderSkills();
     renderHotkeys();

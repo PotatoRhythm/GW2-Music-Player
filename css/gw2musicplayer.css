@@ -212,6 +212,7 @@ button {
     display: flex;
     align-items: center;
     gap: 24px;
+    white-space: nowrap;
 }
 
 .button {
@@ -282,6 +283,60 @@ button {
     margin-left: 10px;
     font-size: 16px;
     color: #9893b4;
+}
+
+/* Ping */
+
+.ping {
+    margin-left: -14px;
+    padding: 4px 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 8px;
+    background: #353654;
+    color: #9893b4;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: background 0.3s ease-in-out;
+}
+
+.ping:hover {
+    background: #4a4269;
+}
+
+.ping[hidden],
+.ping [hidden] {
+    display: none;
+}
+
+.ping button,
+.ping input {
+    border: none;
+    border-radius: 4px;
+    color: inherit;
+    font: inherit;
+}
+
+.ping button {
+    padding: 0;
+    background: none;
+    cursor: inherit;
+}
+
+#ping-custom {
+    cursor: default;
+}
+
+.ping input {
+    width: 50px;
+    padding: 2px 4px;
+    background: #151621;
+}
+
+.ping .failed {
+    color: #b46a6a;
 }
 
 /* Volume */
