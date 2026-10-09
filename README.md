@@ -2,6 +2,8 @@
 
 Play the Guild Wars 2 musical instruments in your browser, with the in-game skill bar layout and hotkeys. Turn on **GW2 Accurate** to play them with all the quirks and limitations they have in game.
 
+**Try it here: [potatorhythm.github.io/gw2-music-player](https://potatorhythm.github.io/gw2-music-player/)**
+
 ## Running it locally
 
 Browsers don't let pages load sounds from files opened directly, so serve the folder with any local web server. With Python:
