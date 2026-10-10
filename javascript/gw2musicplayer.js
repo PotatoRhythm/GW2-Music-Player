@@ -889,6 +889,67 @@ function menuIcon(slot) {
     return `skill${slot.startsWith('f') ? 'F' + slot.slice(1) : slot.slice(1)}.png`;
 }
 
+/* ### NPC VOICES ### */
+
+const VOICE_LINES = [
+    'sound/voice/violets.ogg', 'sound/voice/quality-armor.ogg', 'sound/voice/rich.ogg', 'sound/voice/golem.ogg',
+    'sound/voice/bandit.ogg',
+];
+const VOICE_INTERVAL = { min: 300, max: 600 };
+const voiceLine = { playing: null, last: null, request: 0, timer: null, buffers: new Map() };
+
+function loadVoiceLine(url) {
+    if (!voiceLine.buffers.has(url)) {
+        const buffer = fetchRaw(url).then(data => ctx.decodeAudioData(data.slice(0)));
+        buffer.catch(() => voiceLine.buffers.delete(url));
+        voiceLine.buffers.set(url, buffer);
+    }
+    return voiceLine.buffers.get(url);
+}
+
+async function playVoiceLine() {
+    stopVoiceLine();
+    const request = voiceLine.request;
+    const choices = VOICE_LINES.filter(url => url !== voiceLine.last);
+    const url = choices[Math.floor(Math.random() * choices.length)];
+    voiceLine.last = url;
+    let buffer;
+    try {
+        buffer = await loadVoiceLine(url);
+    } catch {
+        return;
+    }
+    if (request !== voiceLine.request) return;
+    const source = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    source.buffer = buffer;
+    source.connect(gain).connect(master);
+    source.start();
+    voiceLine.playing = { source, gain };
+    source.onended = () => {
+        if (voiceLine.playing?.source === source) voiceLine.playing = null;
+    };
+}
+
+function stopVoiceLine() {
+    voiceLine.request++;
+    if (!voiceLine.playing) return;
+    const { source, gain } = voiceLine.playing;
+    gain.gain.setTargetAtTime(0, ctx.currentTime, FADE.cut / 4);
+    source.stop(ctx.currentTime + FADE.cut);
+    voiceLine.playing = null;
+}
+
+function scheduleVoiceLines() {
+    clearTimeout(voiceLine.timer);
+    if (!state.accurate) return;
+    const { min, max } = VOICE_INTERVAL;
+    voiceLine.timer = setTimeout(() => {
+        if (!document.hidden && ctx.state === 'running') playVoiceLine();
+        scheduleVoiceLines();
+    }, (min + Math.random() * (max - min)) * 1000);
+}
+
 /* ### PING ### */
 
 const ping = { ms: null, warm: false, failed: false, run: 0, timer: null };
@@ -995,6 +1056,7 @@ function setupSettingsBar() {
     const accurateToggle = document.getElementById('accurate-toggle');
     accurateToggle.checked = state.accurate;
     accurateToggle.addEventListener('change', () => {
+        unlockAudio();
         state.accurate = accurateToggle.checked;
         state.octave = Math.min(state.octave, lastOctave());
         resetSpeedLimit();
@@ -1002,6 +1064,8 @@ function setupSettingsBar() {
         flipSkills();
         saveSettings();
         updatePing();
+        if (state.accurate) playVoiceLine(); else stopVoiceLine();
+        scheduleVoiceLines();
     });
 
     const slider = document.querySelector('#volume-slider input');
@@ -1061,6 +1125,7 @@ async function init() {
     buildHotkeyMenu();
     setupSettingsBar();
     setupPing();
+    scheduleVoiceLines();
     setupPointerInput();
     renderSkills();
     renderHotkeys();
